@@ -152,6 +152,44 @@ impl<'model> LlamaContext<'model> {
         }
     }
 
+    /// Get the classifier rank/pooling scores for the `i`th sequence in the current context.
+    ///
+    /// # Returns
+    ///
+    /// A slice containing the classifier outputs for the last decoded batch.
+    /// The size corresponds to the model's `n_cls_out` parameter.
+    ///
+    /// # Errors
+    ///
+    /// - When the current context was constructed without enabling embeddings.
+    /// - If the current model has no classifier head (`n_cls_out == 0`).
+    /// - If the given sequence index exceeds the max sequence id.
+    ///
+    /// # Panics
+    ///
+    /// * `n_cls_out` does not fit into a usize
+    pub fn rank_scores_seq_ith(&self, i: i32) -> Result<&[f32], EmbeddingsError> {
+        if !self.embeddings_enabled {
+            return Err(EmbeddingsError::NotEnabled);
+        }
+
+        let n_cls_out =
+            usize::try_from(self.model.n_cls_out()).expect("n_cls_out does not fit into a usize");
+        if n_cls_out == 0 {
+            return Err(EmbeddingsError::NonePoolType);
+        }
+
+        unsafe {
+            let scores = llama_cpp_sys_2::llama_get_embeddings_seq(self.context.as_ptr(), i);
+            // Technically also possible whenever `i >= max(batch.n_seq)`, but can't check that here.
+            if scores.is_null() {
+                Err(EmbeddingsError::NonePoolType)
+            } else {
+                Ok(slice::from_raw_parts(scores, n_cls_out))
+            }
+        }
+    }
+
     /// Get the embeddings for the `i`th token in the current context.
     ///
     /// # Returns
