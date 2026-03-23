@@ -638,6 +638,30 @@ impl LlamaModel {
         unsafe { llama_cpp_sys_2::llama_n_embd(self.model.as_ptr()) }
     }
 
+    /// Returns the number of classifier outputs for rank/pooling heads.
+    #[must_use]
+    pub fn n_cls_out(&self) -> u32 {
+        // It's never possible for this to panic because while the API interface is defined as an int32_t,
+        // the field it's accessing is a uint32_t.
+        u32::try_from(unsafe { llama_cpp_sys_2::llama_model_n_cls_out(self.model.as_ptr()) })
+            .unwrap()
+    }
+
+    /// Returns the classifier label for a given output index, if present.
+    ///
+    /// # Errors
+    ///
+    /// - If the label contains invalid UTF-8.
+    pub fn cls_label(&self, idx: u32) -> Result<Option<String>, Utf8Error> {
+        let label_ptr = unsafe { llama_cpp_sys_2::llama_model_cls_label(self.model.as_ptr(), idx) };
+        if label_ptr.is_null() {
+            return Ok(None);
+        }
+
+        let label = unsafe { CStr::from_ptr(label_ptr) }.to_str()?.to_string();
+        Ok(Some(label))
+    }
+
     /// Returns the total size of all the tensors in the model in bytes.
     pub fn size(&self) -> u64 {
         unsafe { llama_cpp_sys_2::llama_model_size(self.model.as_ptr()) }
